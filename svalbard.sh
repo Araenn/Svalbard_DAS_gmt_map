@@ -3,91 +3,95 @@ set -e
 
 IBCAO="ibcao_100.nc"
 
+OFFSET=28000
+X0=331419.685765
+Y0=-1250000.083459
 
-# Svalbard area in PS coordinates
+XMIN=$(echo "$X0 - $OFFSET" | bc)
+XMAX=$(echo "$X0 + $OFFSET" | bc)
+YMIN=$(echo "$Y0 - $OFFSET" | bc)
+YMAX=$(echo "$Y0 + $OFFSET" | bc)
+
+REGION="${XMIN}/${XMAX}/${YMIN}/${YMAX}"
+
+R_MAIN="-R$REGION"
+J_MAIN="-JX18c"
+
 REGION_SVALBARD_PS="-263624.366136/726772.996969/-2518126.587061/-98707.603915"
+R_SVAL="-R$REGION_SVALBARD_PS"
+J_SVAL="-JX5.5c"
 
-## zoom on Isfjorden ##
-# Offset (meters) to adjust
-OFFSET_X=90000
-OFFSET_Y=40000
-# Reference point
-X0=349784.449892
-Y0=-1249283.373283
-# bottom left
-REGION_ISFJORDEN_PS_X_bot=$(echo "$X0 - $OFFSET_X" | bc)
-REGION_ISFJORDEN_PS_Y_bot=$(echo "$Y0 - $OFFSET_Y" | bc)
-# adjustment
-REGION_ISFJORDEN_PS_X_top=$(echo "$REGION_ISFJORDEN_PS_X_bot + 130000" | bc)
-REGION_ISFJORDEN_PS_Y_top=$(echo "$REGION_ISFJORDEN_PS_Y_bot + 130000" | bc)
-# final variable
-REGION_ISFJORDEN_PS="${REGION_ISFJORDEN_PS_X_bot}/${REGION_ISFJORDEN_PS_X_top}/${REGION_ISFJORDEN_PS_Y_bot}/${REGION_ISFJORDEN_PS_Y_top}"
+OFFSET_IS=200000
+XMINIS=$(echo "$X0 - $OFFSET_IS" | bc)
+XMAXIS=$(echo "$X0 + $OFFSET_IS" | bc)
+YMINIS=$(echo "$Y0 - $OFFSET_IS" | bc)
+YMAXIS=$(echo "$Y0 + $OFFSET_IS" | bc)
+REGION_ISFJORDEN_PS="${XMINIS}/${XMAXIS}/${YMINIS}/${YMAXIS}"
+R_IS="-R$REGION_ISFJORDEN_PS"
+J_IS="-JX5.5c"
 
+gmt begin fjord_capteurs_cables pdf
 
-## same thing for Lonyearbyen ##
+    gmt set MAP_FRAME_TYPE plain \
+            FONT_ANNOT_PRIMARY 12p \
+            FONT_LABEL 12p \
+            FONT_TITLE 14p
 
-OFFSET_X=40000
-OFFSET_Y=$OFFSET_X
-OFFSET_X2=$OFFSET_X
-OFFSET_Y2=$OFFSET_X
+    gmt makecpt -Cibcso -T-6000/0
 
-LONGYEARBYEN_X=359419.685765
-LONGYEARBYEN_Y=-1218936.083459
+    # =========================
+    # Main map
+    # =========================
+    gmt grdcut "$IBCAO" $R_MAIN -Gfjord.nc
+    gmt grdimage fjord.nc $R_MAIN $J_MAIN -C -I+d
 
-REGION_LONGYEARBYEN_PS_X_bot=$(echo "$LONGYEARBYEN_X - $OFFSET_X" | bc)
-REGION_LONGYEARBYEN_PS_Y_bot=$(echo "$LONGYEARBYEN_Y - $OFFSET_Y" | bc)
+    # Câbles
+    gmt plot track_ibcao_outer.xy         $R_MAIN $J_MAIN -W3p,black -l"Outer cable"
+    gmt plot track_ibcao_outer_section.xy $R_MAIN $J_MAIN -W3p,red   -l"20 km section"
 
-REGION_LONGYEARBYEN_PS_X_top=$(echo "$REGION_LONGYEARBYEN_PS_X_bot + $OFFSET_X2" | bc)
-REGION_LONGYEARBYEN_PS_Y_top=$(echo "$REGION_LONGYEARBYEN_PS_Y_bot + $OFFSET_Y2" | bc)
+    # Capteurs
+    gmt plot stations_obs.xy $R_MAIN $J_MAIN -St0.7c -Gorange -l"OBS"
+    gmt plot stations_st.xy  $R_MAIN $J_MAIN -Sx0.7c -W2p,darkgreen         -l"Hydrophones"
 
-REGION_LONGYEARBYEN_PS="${REGION_LONGYEARBYEN_PS_X_bot}/${REGION_LONGYEARBYEN_PS_X_top}/${REGION_LONGYEARBYEN_PS_Y_bot}/${REGION_LONGYEARBYEN_PS_Y_top}"
+    # Cadre
+    gmt basemap $R_MAIN $J_MAIN -Baf -BWSen+t"Isfjorden - bathymetry, DAS cable, geophones and hydrophones"
 
-## creation of the map ##
+    # Légende
+    gmt legend -DjBR+o0.3c -F+p1p+gwhite
 
-gmt begin svalbard_isfjorden_ps pdf
-gmt set MAP_FRAME_TYPE plain FONT_ANNOT_PRIMARY 16p FONT_LABEL 10p FONT_TITLE 14p
-gmt makecpt -Cibcso -T-6000/0
+    # Colorbar
+    gmt colorbar -C \
+    -DjBL+o1c/1.3c+w8c/0.2c+h \
+    -Bxa1000+l"Depth (m)" \
+    -F+p1p+gwhite
 
-gmt subplot begin 2x2 -Fs24c/24c -M1.2c -A+jTL+o1c
+    # =========================
+    # Inset 1 : World -> Svalbard
+    # =========================
+    gmt inset begin -DjTL+w4.5c+o0.25c -F+p1p+gwhite
+        gmt coast -Rg -JG15/75/4.5c -Ggray80 -Swhite -A1000 -W0.25p
+        echo 15 78 | gmt plot -Sc0.18c -Gred -W0.25p
+        echo 15 78 Svalbard | gmt text -F+f10p,Helvetica-Bold,red+jLB -Dj0.15c/0.15c
+    gmt inset end
 
-# (a) Svalbard
-gmt subplot set 0
-gmt grdcut $IBCAO -R$REGION_SVALBARD_PS -Gglobal_svalbard.nc
-gmt grdimage global_svalbard.nc -R$REGION_SVALBARD_PS -JX24c -C -I+d
-gmt plot track_ibcao_outer.xy -R$REGION_SVALBARD_PS -JX24c -W3p,black -l"Outer cable"
-#gmt plot track_ibcao_inner.xy -R$REGION_SVALBARD_PS -JX24c -W3p,pink
-gmt basemap -Baf -BWSen+t"Svalbard - Bathymetry IBCAO v4 (PS)"
-gmt legend -DjTR+o1c -F+p1p+ggray95
+    # =========================
+    # Inset 2 : Svalbard -> Isfjorden
+    # =========================
+    gmt inset begin -DjTR+w5.5c+o0.25c -F+p1p+gwhite
+        gmt grdcut "$IBCAO" $R_IS -Gsvalbard_inset.nc
+        gmt grdimage svalbard_inset.nc $R_IS $J_IS -C -I+d
 
-# (b) Isfjorden
-gmt subplot set 1
-gmt grdcut $IBCAO -R$REGION_ISFJORDEN_PS -Gisfjorden.nc
-gmt grdimage isfjorden.nc -R$REGION_ISFJORDEN_PS -JX24c -C -I+d
-gmt plot track_ibcao_outer.xy -R$REGION_ISFJORDEN_PS -JX24c -W4p,black -l"Outer cable"
-gmt plot track_ibcao_outer_section.xy -R$REGION_ISFJORDEN_PS -JX24c -W3p,red -l"20 km section"
-gmt plot stations_obs.xy -R$REGION_ISFJORDEN_PS -St1c -Gdarkgreen -l"OBS"
-#gmt text stations_obs.xy -R$REGION_ISFJORDEN_PS -F+f8p+jBR -Dj0.1c/0.5c
-gmt plot stations_st.xy -R$REGION_ISFJORDEN_PS -Sx1c -Gorange -l"Hydrophones"
-#gmt text stations_st.xy -R$REGION_ISFJORDEN_PS -F+f8p+jTL -Dj0.1c/0.5c
-gmt basemap -Baf -BWSen+t"Isfjorden - Bathymetry IBCAO v4 (PS)"
-gmt legend -DjTR+o1c -F+p1p+ggray95
+        gmt plot track_ibcao_outer.xy $R_IS $J_IS -W1p,black
 
-# (c) LONGYEARBYEN
-gmt subplot set 2
-gmt grdcut $IBCAO -R$REGION_LONGYEARBYEN_PS -Glongyearbyen_ibcao.nc
-gmt grdimage longyearbyen_ibcao.nc -R$REGION_LONGYEARBYEN_PS -JX24c -C -I+d
+        cat << EOF | gmt plot $R_IS $J_IS -W1.5p,red
+$XMIN $YMIN
+$XMAX $YMIN
+$XMAX $YMAX
+$XMIN $YMAX
+$XMIN $YMIN
+EOF
 
-gmt plot track_ibcao_outer.xy -R$REGION_LONGYEARBYEN_PS -JX24c -W4p,black -l"Outer cable"
-gmt plot track_ibcao_outer_section.xy -R$REGION_LONGYEARBYEN_PS -JX24c -W3p,red -l"20 km section"
-gmt plot stations_obs.xy -R$REGION_LONGYEARBYEN_PS -St1c -Gdarkgreen -l"OBS"
-#gmt text stations_obs.xy -R$REGION_LONGYEARBYEN_PS -F+f8p+jBR -Dj0.1c/0.5c
-gmt plot stations_st.xy -R$REGION_LONGYEARBYEN_PS -Sx1c -Gorange -l"Hydrophones"
-#gmt text stations_st.xy -R$REGION_LONGYEARBYEN_PS -F+f8p+jTL -Dj0.1c/0.5c
+        echo "$XMAX $YMAX Isfjorden" | gmt text $R_IS $J_IS -F+f10p,Helvetica-Bold,red+jBL -Dj0.1c/0.1c
+    gmt inset end
 
-gmt basemap -Baf -BWSen+t"Longyearbyen - Bathymetry IBCAO v4 (PS)"
-gmt legend -DjTR+o1c -F+p1p+ggray95
-
-gmt set FONT_ANNOT_PRIMARY 8p
-gmt colorbar -C -Dx0c/-1.5c+w50c/0.5c+h -Bxa1000+l"Depth (m)"
-gmt subplot end
 gmt end show
